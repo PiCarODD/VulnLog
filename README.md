@@ -5,6 +5,8 @@
 
 VulnLog is a powerful Burp Suite extension designed to help security researchers track and manage vulnerabilities during penetration tests and security assessments.
 
+![VulnLog](https://github.com/PiCarODD/VulnLog/blob/main/8ab214cd352727.gif)
+
 ## Features
 
 - **Vulnerability Logging**: Capture findings directly from Proxy history and Repeater

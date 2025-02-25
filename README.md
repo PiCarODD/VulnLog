@@ -26,9 +26,10 @@ VulnLog is a powerful Burp Suite extension designed to help security researchers
    - Go to **Extender** > **Options**
    - Under **Python Environment**, select the Jython JAR file
 3. Download `VulnLog.py` from this repository
-4. Go to **Extender** > **Extensions** > **Add**
+4. Go to **Extensions** > **Installed** >  **Add**
 5. Select **Python** as the extension type
 6. Choose the `VulnLog.py` file
+7. Click Next
 
 ## Usage
 
@@ -36,3 +37,19 @@ VulnLog is a powerful Burp Suite extension designed to help security researchers
 1. Right-click any request in Proxy/Repeater
 2. Select **Extensions** > **Add to VulnLog**
 3. Enter vulnerability name when prompted
+
+### Reviewing Vulnerabilities
+1. Go to the VulnLog tab
+2. Review the findings
+3. Click on each findings to view the request and response
+
+## Contributing
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (git checkout -b feature/your-feature)
+3. Commit changes (git commit -am 'Add some feature')
+4. Push to branch (git push origin feature/your-feature)
+5. Open a Pull Request
+
+**Disclaimer**: This tool is intended for authorized security testing and educational purposes only. Always obtain proper authorization before testing systems.

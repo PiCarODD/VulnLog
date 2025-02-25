@@ -10,8 +10,6 @@ VulnLog is a powerful Burp Suite extension designed to help security researchers
 - **Vulnerability Logging**: Capture findings directly from Proxy history and Repeater
 - **Context Menu Integration**: Right-click any request to log vulnerabilities
 - **Rich UI Dashboard**:
-  - Track vulnerability status (Confirmed/Reported/False Positive)
-  - Sort and filter findings
   - Delete individual entries or clear entire logs
 - **Request/Response Storage**: Store full HTTP traffic for each finding
 - **Persistent Storage**: Maintains data between Burp sessions

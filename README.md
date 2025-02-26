@@ -38,10 +38,14 @@ VulnLog is a powerful Burp Suite extension designed to help security researchers
 2. Select **Extensions** > **Add to VulnLog**
 3. Enter vulnerability name when prompted
 
+![VulnLog](https://github.com/PiCarODD/VulnLog/blob/main/a19bc1ff.png)
+
 ### Reviewing Vulnerabilities
 1. Go to the VulnLog tab
 2. Review the findings
 3. Click on each findings to view the request and response
+
+![VulnLog](https://github.com/PiCarODD/VulnLog/blob/main/d0d761a.png)
 
 ## Contributing
 Contributions are welcome! Please follow these steps:

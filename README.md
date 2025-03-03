@@ -19,6 +19,11 @@ VulnLog is a powerful Burp Suite extension designed to help security researchers
 - **Export/Import**: Save findings in JSON format
 - **Message Viewer**: Built-in request/response viewer with syntax highlighting
 
+## New Feature to add 
+- AI integration
+- Export  as PDF, Word doc, XML, HTML templates
+- Edit Findings
+
 ## Installation
 
 1. Download the latest [Jython Standalone JAR](https://www.jython.org/download)

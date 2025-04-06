@@ -4,7 +4,25 @@
 ![Python](https://img.shields.io/badge/Python-Jython%202.7-yellow)
 
 VulnLog is a powerful Burp Suite extension designed to help security researchers track and manage vulnerabilities during penetration tests and security assessments. It provides a comprehensive interface for logging, managing, and documenting security findings.
-![VulnLog](https://github.com/PiCarODD/VulnLog/blob/main/8ab214cd352727.gif)
+
+## Screenshots
+
+### Main Dashboard
+![VulnLog Dashboard](vuln_log_dashboard.png)
+*VulnLog's main interface showing the findings table and request/response views*
+
+### Adding New Findings
+![Add Finding Dialog](add_finding.png)
+*Dialog for adding new security findings with detailed fields*
+
+### Detailed View
+![Finding Details](details_view.png)
+*Comprehensive view of finding details with full information*
+
+### Extension Access
+![Extension Menu](entry_points_extension_selection.png)
+*Accessing VulnLog through Burp Suite's context menu*
+
 ## Features
 
 ### Core Functionality
@@ -18,25 +36,26 @@ VulnLog is a powerful Burp Suite extension designed to help security researchers
 
 ### User Interface
 - **Rich Dashboard**:
-  - Sortable findings table
-  - Tooltips for long text entries
-  - Detailed view dialog for better readability
-  - Request/Response viewer with syntax highlighting
-- **Context Menu Integration**: Right-click any request to add findings
-- **Multiple View Options**:
-  - Table view for quick overview
-  - Detailed view for comprehensive information
-  - Split-pane layout for request/response inspection
+  - Sortable findings table with tooltips for long text
+  - Split-pane layout showing findings and request/response details
+  - Quick access buttons for common actions
+- **Finding Details**:
+  - Dedicated dialog for viewing complete finding information
+  - Edit capability through double-click
+  - Tooltips for quick preview of long content
+- **Context Menu Integration**: 
+  - Right-click access in Proxy, Repeater, and Scanner
+  - Quick "Send to VulnLog" option
 
 ### Data Management
 - **Finding Operations**:
-  - Add new findings
-  - Edit existing findings
-  - Delete individual entries
-  - Clear all findings
-  - Export findings to JSON
-- **Persistent Storage**: Maintains data between Burp sessions
-- **Project-Based Organization**: Automatically organizes findings by target host
+  - Add new findings with comprehensive details
+  - Edit existing findings through double-click
+  - Delete individual or all findings
+  - Export findings to JSON format
+- **Persistent Storage**: 
+  - Maintains data between Burp sessions
+  - Project-based organization by target host
 
 ### Severity Levels
 - Critical
@@ -61,7 +80,7 @@ VulnLog is a powerful Burp Suite extension designed to help security researchers
 
 ### Adding Findings
 1. Right-click any request in Proxy/Repeater/Scanner
-2. Select "Send to VulnLog"
+2. Navigate to **Extensions** > **VulnLog** > **Send to VulnLog**
 3. Fill in the finding details:
    - Name (required)
    - Severity level
@@ -70,32 +89,30 @@ VulnLog is a powerful Burp Suite extension designed to help security researchers
    - Recommendation
 
 ### Managing Findings
-1. Navigate to the VulnLog tab
-2. Use the table to view all findings
-3. Available actions:
-   - Double-click to edit a finding
-   - Click "View Details" for full information
-   - Use "Delete Selected" to remove findings
-   - Use "Clear All" to remove all findings
-   - Export findings using "Export Findings"
-![VulnLog](https://github.com/PiCarODD/VulnLog/blob/main/a19bc1ff.png)
+- Use the main dashboard to view all findings
+- Double-click any finding to edit its details
+- Use the toolbar buttons for:
+  - Exporting findings
+  - Clearing all findings
+  - Deleting selected findings
+- Click "View Details" for comprehensive information
 
 ### Viewing Details
 - Select any finding to view its request/response
 - Use tooltips for quick preview of long text
-- Click "View Details" for a comprehensive view
+- Click "View Details" for full information display
 - Double-click entries to edit them
 
 ### Exporting Data
 - Click "Export Findings" to save as JSON
-- Exports include:
+- Export includes:
   - Target information (host, port)
   - Finding details
   - Full request/response data
   - Evidence in both raw and encoded formats
-![VulnLog](https://github.com/PiCarODD/VulnLog/blob/main/d0d761a.png)
+
 ## Upcoming Features
-- AI integration with GPT and Deepseek support
+- AI integration with GPT and Deepseek support (UI elements already in place)
 - Additional export formats (PDF, Word, XML, HTML)
 - Enhanced finding templates
 - Custom severity levels

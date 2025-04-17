@@ -33,6 +33,7 @@ VulnLog is a powerful Burp Suite extension designed to help security researchers
   - Impact assessment documentation
   - Recommendation documentation
   - Full HTTP request/response storage
+  - Availabe to view findings in issue tab
 
 ### User Interface
 - **Rich Dashboard**:

@@ -1,4 +1,4 @@
-from burp import IBurpExtender, ITab, IContextMenuFactory, IMessageEditorController, IExtensionStateListener
+from burp import IBurpExtender, ITab, IContextMenuFactory, IMessageEditorController, IExtensionStateListener, IScanIssue, IHttpRequestResponse
 from javax.swing import (JDialog, JTextField, JTextArea, JComboBox, JScrollPane,JTabbedPane,
                         JButton, JPanel, BoxLayout, JLabel, BorderFactory,ButtonGroup,JRadioButton,JTable,JSplitPane, JMenuItem, JOptionPane)
 from java.awt import Dimension, GridBagLayout, GridBagConstraints, Insets, BorderLayout, FlowLayout, Color
@@ -16,6 +16,36 @@ import sys
 import os
 from java.awt.event import MouseAdapter
 from javax.swing import SwingUtilities
+
+# Custom implementation of IHttpRequestResponse that includes all required methods
+class CustomHttpRequestResponse(IHttpRequestResponse):
+    def __init__(self, request, response, service):
+        self._request = request
+        self._response = response
+        self._service = service
+        self._comment = None
+        self._highlight = None
+    
+    def getRequest(self):
+        return self._request
+    
+    def getResponse(self):
+        return self._response
+    
+    def getHttpService(self):
+        return self._service
+        
+    def getComment(self):
+        return self._comment
+        
+    def setComment(self, comment):
+        self._comment = comment
+        
+    def getHighlight(self):
+        return self._highlight
+        
+    def setHighlight(self, color):
+        self._highlight = color
 
 class DoubleClickListener(MouseAdapter):
     def __init__(self, callback):
@@ -258,6 +288,13 @@ class AddFindingDialog(JDialog):
             'recommendation': self.recommendation_area.getText(),
             'handled': True
         }
+        
+        # Inform user that finding will be added to Burp Issues
+        JOptionPane.showMessageDialog(self,
+            "Finding will be added to VulnLog and automatically sent to Burp Issues.",
+            "Information",
+            JOptionPane.INFORMATION_MESSAGE)
+        
         self.dispose()
 
 def log(msg):
@@ -316,12 +353,59 @@ class MessageController:
                 'recommendation': entry.get('recommendation', 'TODO')
             })
             
+            # Keep a reference to http_service, but don't store it in data that will be serialized
+            http_service = entry.get('http_service')
+            if 'http_service' in entry:
+                del entry['http_service']  # Remove before serialization
+            
             self.data.append(entry)
             self._save_data()
             self.notify_listeners()
+            
+            # Automatically send to Burp Issues
+            try:
+                # Basic validation
+                if not 'url' in entry or not entry['url']:
+                    log("Cannot send to Burp Issues - no URL provided")
+                    return
+                    
+                # Put http_service back for scan issue creation if available
+                if http_service:
+                    try:
+                        entry['http_service'] = http_service
+                        log("Using stored HTTP service for scan issue")
+                    except Exception as svc_ex:
+                        log("Error setting HTTP service: " + str(svc_ex))
+                        
+                # Create scan issue with error handling
+                try:
+                    issue = VulnLogScanIssue(entry, self.helpers)
+                    if issue._url is None:
+                        log("Failed to create a valid URL for scan issue")
+                        return
+                        
+                    # Add to Burp issues
+                    self.callbacks.addScanIssue(issue)
+                    log("Automatically sent finding to Burp Issues: " + entry['name'])
+                except Exception as issue_ex:
+                    log("Error creating scan issue: " + str(issue_ex))
+                    import traceback
+                    log(traceback.format_exc())
+                    
+                # Clean up
+                if 'http_service' in entry:
+                    del entry['http_service']
+                    
+            except Exception as e:
+                log("Error auto-sending to Burp Issues: " + str(e))
+                import traceback
+                log(traceback.format_exc())
+            
             log("Vulnerability added and saved")
         except Exception as e:
             log("Error adding vulnerability: " + str(e))
+            import traceback
+            log(traceback.format_exc())
 
     def delete_finding(self, index):
         """Delete finding at specified index"""
@@ -446,6 +530,25 @@ class MessageController:
         self._save_data()
         self.notify_listeners()
 
+    def send_to_burp_issues(self, finding_indices=None):
+        """
+        Send findings to Burp's Issues panel
+        finding_indices: List of indices to send. If None, sends all findings
+        """
+        try:
+            findings = self.data if finding_indices is None else [self.data[i] for i in finding_indices]
+            
+            for finding in findings:
+                # Create scan issue
+                scan_issue = VulnLogScanIssue(finding, self.helpers)
+                
+                # Add to Burp's issues
+                self.callbacks.addScanIssue(scan_issue)
+            
+            return len(findings)
+        except Exception as e:
+            log("Error sending to Burp issues: " + str(e))
+            return 0
 
     # Remove get_storage_file() and other file-related methods
     # Keep other existing methods (get_data, add_listener, notify_listeners)
@@ -562,6 +665,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
                     if dialog.result is None:
                         continue
                         
+                    # Create entry with request/response
                     entry = {
                         'id': self._generate_id(),
                         'url': str(url),
@@ -571,7 +675,8 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
                         'description': dialog.result['description'],
                         'severity': dialog.result['severity'],
                         'impact': dialog.result['impact'],
-                        'recommendation': dialog.result['recommendation']
+                        'recommendation': dialog.result['recommendation'],
+                        'http_service': message.getHttpService()  # Store HTTP service for later use
                     }
                     
                     self.controller.add_vulnerability(entry)
@@ -579,7 +684,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
                     # Show confirmation
                     SwingUtilities.invokeLater(lambda: JOptionPane.showMessageDialog(
                         parent_component,
-                        "Finding added successfully!",
+                        "Finding added successfully and sent to Burp Issues!",
                         "Success",
                         JOptionPane.INFORMATION_MESSAGE
                     ))
@@ -694,6 +799,12 @@ class VulnLogTab(IMessageEditorController):
         self.details_button.addActionListener(lambda event: self._show_details_dialog())
         self.details_button.setEnabled(False)  # Initially disabled until selection
         top_panel.add(self.details_button)
+        top_panel.add(Box.createHorizontalStrut(10))
+        
+        # Add "Send to Burp Issues" button
+        self.send_to_burp_button = JButton("Send to Burp Issues")
+        self.send_to_burp_button.addActionListener(self._send_to_burp_issues)
+        top_panel.add(self.send_to_burp_button)
         top_panel.add(Box.createHorizontalStrut(10))
         
         # Create table model and table
@@ -857,7 +968,7 @@ class VulnLogTab(IMessageEditorController):
     
 
     def getHttpService(self):
-        return self.current_message.getHttpService() if self.current_message else None
+        return self.current_message.getHttpService() if hasattr(self, 'current_message') and self.current_message else None
 
     def getRequest(self):
         return self.current_message['request'] if self.current_message else None
@@ -1053,6 +1164,36 @@ class VulnLogTab(IMessageEditorController):
             dialog.add(panel)
             dialog.setVisible(True)
 
+    def _send_to_burp_issues(self, event):
+        """Handle sending findings to Burp Issues"""
+        try:
+            # Get selected rows or all if none selected
+            rows = self.table.getSelectedRows()
+            if not rows:
+                # No selection, send all
+                count = self.controller.send_to_burp_issues()
+                msg = "All findings"
+            else:
+                # Send only selected
+                model_rows = [self.table.convertRowIndexToModel(row) for row in rows]
+                count = self.controller.send_to_burp_issues(model_rows)
+                msg = "Selected findings"
+            
+            # JOptionPane.showMessageDialog(
+            #     self.panel,
+            #     "{} ({}) have been sent to Burp Issues".format(msg, count),
+            #     "Success",
+            #     JOptionPane.INFORMATION_MESSAGE
+            # )
+        except Exception as e:
+            log("Error in send to Burp: " + str(e))
+            JOptionPane.showMessageDialog(
+                self.panel,
+                "Error sending to Burp Issues: " + str(e),
+                "Error",
+                JOptionPane.ERROR_MESSAGE
+            )
+
 class VulnTableModel(AbstractTableModel):
     def __init__(self, controller):
         self.controller = controller
@@ -1095,3 +1236,200 @@ class VulnTableModel(AbstractTableModel):
     def update(self):
         """Refresh the table data"""
         self.fireTableDataChanged()
+
+class VulnLogScanIssue(IScanIssue):
+    def __init__(self, finding, helpers):
+        self._finding = finding
+        self._helpers = helpers
+        
+        # Use stored HTTP service if available
+        if 'http_service' in finding and finding['http_service']:
+            self._http_service = finding['http_service']
+            # The http_service object doesn't have a getUrl method - construct URL from parts
+            try:
+                from java.net import URL
+                # Handle both cases - getProtocol might return a string or boolean
+                try:
+                    protocol_value = self._http_service.getProtocol()
+                    if isinstance(protocol_value, bool):
+                        protocol = "https" if protocol_value else "http"
+                    else:  # Assume string
+                        protocol = "https" if str(protocol_value).lower() == "https" else "http"
+                except Exception as proto_ex:
+                    # Default to http if we can't determine
+                    log("Could not determine protocol: " + str(proto_ex) + ", defaulting to http")
+                    protocol = "http"
+                
+                host = self._http_service.getHost()
+                port = self._http_service.getPort()
+                
+                # Construct URL with extra protection
+                url_str = ""
+                try:
+                    if port == 443 and protocol == "https" or port == 80 and protocol == "http":
+                        # Default ports - don't include in URL
+                        url_str = protocol + "://" + host
+                    else:
+                        url_str = protocol + "://" + host + ":" + str(port)
+                    
+                    # Add path if available in the original URL
+                    try:
+                        if 'url' in finding and finding['url']:
+                            original_url = URL(finding['url'])
+                            path = original_url.getPath()
+                            if path:
+                                url_str += path
+                            query = original_url.getQuery()
+                            if query:
+                                url_str += "?" + query
+                    except Exception as path_ex:
+                        log("Couldn't add path from original URL: " + str(path_ex))
+                        
+                    self._url = URL(url_str)
+                    log("Constructed URL from HTTP service: " + url_str)
+                except Exception as url_ex:
+                    log("Error during URL construction: " + str(url_ex))
+                    # Just create a basic URL with minimal parts
+                    try:
+                        url_str = protocol + "://" + host
+                        self._url = URL(url_str)
+                        log("Using simplified URL: " + url_str)
+                    except Exception as simple_ex:
+                        # Last resort - try to use the original URL
+                        try:
+                            self._url = URL(finding['url'])
+                            log("Falling back to original URL")
+                        except Exception as final_ex:
+                            self._url = None
+                            log("Failed to create any URL: " + str(final_ex))
+            except Exception as main_ex:
+                log("Error constructing URL from HTTP service: " + str(main_ex))
+                # Fallback to the original URL
+                try:
+                    self._url = URL(finding['url'])
+                except Exception as fallback_ex:
+                    self._url = None
+                    log("Complete fallback failure: " + str(fallback_ex))
+            
+            # Create IHttpRequestResponse implementation for request/response
+            if 'request' in finding and finding['request']:
+                self._requestResponse = CustomHttpRequestResponse(
+                    finding['request'],
+                    finding.get('response', None),
+                    self._http_service
+                )
+            else:
+                self._requestResponse = None
+        else:
+            # Create HTTP service from URL
+            try:
+                url_str = finding['url']
+                from java.net import URL
+                java_url = URL(url_str)
+                
+                # Get protocol, host, port from URL
+                protocol = java_url.getProtocol()
+                host = java_url.getHost()
+                port = java_url.getPort()
+                if port == -1:
+                    # Default ports for http/https
+                    port = 443 if protocol == "https" else 80
+                    
+                # Create HTTP service
+                self._http_service = helpers.buildHttpService(host, port, protocol == "https")
+                self._url = java_url
+                log("Successfully created HTTP service from URL: " + url_str)
+                
+                # Create IHttpRequestResponse implementation for request/response
+                if 'request' in finding and finding['request']:
+                    self._requestResponse = CustomHttpRequestResponse(
+                        finding['request'],
+                        finding.get('response', None),
+                        self._http_service
+                    )
+                else:
+                    self._requestResponse = None
+                    
+            except Exception as e:
+                log("Error creating HTTP service: " + str(e))
+                # Fallback to simpler approach
+                try:
+                    from java.net import URL
+                    self._url = URL(finding['url'])
+                    self._http_service = None
+                    self._requestResponse = None
+                except Exception as ex:
+                    log("Complete failure creating URL object: " + str(ex))
+                    self._url = None
+                    self._http_service = None
+                    self._requestResponse = None
+        
+    def getUrl(self):
+        return self._url
+        
+    def getIssueName(self):
+        # Include severity in title for Critical findings
+        if self._finding.get('severity') == "Critical":
+            return "[VulnLog][CRITICAL] " + self._finding['name']
+        return "[VulnLog] " + self._finding['name']
+        
+    def getIssueType(self):
+        try:
+            # Return a valid issue type
+            return 0x08000000  # Use a custom issue type
+        except Exception as e:
+            log("Error in getIssueType: " + str(e))
+            return 0
+        
+    def getSeverity(self):
+        # Burp Suite doesn't natively support "Critical", 
+        # we need to indicate it's High but keep the Critical name
+        # in the issue title for Critical findings
+        if self._finding.get('severity') == "Critical":
+            return "High"  # Use High as the closest match
+        
+        severity_map = {
+            "High": "High",
+            "Medium": "Medium",
+            "Low": "Low",
+            "Info": "Information"
+        }
+        return severity_map.get(self._finding.get('severity'), "Information")
+        
+    def getConfidence(self):
+        return "Certain"
+        
+    def getIssueBackground(self):
+        return None  # Removed as requested
+        
+    def getRemediationBackground(self):
+        return None  # Removed as requested
+        
+    def getIssueDetail(self):
+        # Include more information in the issue detail with proper HTML formatting
+        detail = "<p>" + self._finding.get('description', 'N/A').replace("\n", "<br>") + "</p>"
+        
+        # Add impact and recommendation with proper HTML formatting
+        detail += "<h4>Impact:</h4>"
+        detail += "<p>" + self._finding.get('impact', 'N/A').replace("\n", "<br>") + "</p>"
+        
+        detail += "<h4>Recommendation:</h4>"
+        detail += "<p>" + self._finding.get('recommendation', 'N/A').replace("\n", "<br>") + "</p>"
+        
+        # Add a note about the source
+        detail += "<hr><p><i>Created by VulnLog Extension</i></p>"
+        
+        return detail
+        
+    def getRemediationDetail(self):
+        return None  # Removed as requested
+        
+    def getHttpMessages(self):
+        # Return HTTP messages if available
+        if self._requestResponse:
+            return [self._requestResponse]
+        return None
+        
+    def getHttpService(self):
+        # Return HTTP service if available, otherwise return null
+        return self._http_service

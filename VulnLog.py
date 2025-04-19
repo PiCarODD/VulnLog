@@ -16,6 +16,7 @@ import sys
 import os
 from java.awt.event import MouseAdapter
 from javax.swing import SwingUtilities
+import threading
 
 # Custom implementation of IHttpRequestResponse that includes all required methods
 class CustomHttpRequestResponse(IHttpRequestResponse):
@@ -308,17 +309,73 @@ class MessageController:
         self.listeners = []
         self.data = []
         self.project_id = self._get_project_id()
+        self._save_lock = threading.Lock()
         log("Initializing for project: " + str(self.project_id))
         self._load_data()
 
-    def _delayed_load(self):
-        """Load data after short delay to ensure project is loaded"""
-        try:
-            self._load_data()
-            self.notify_listeners()
-            log("Delayed load completed")
-        except Exception as e:
-            log("Delayed load failed: " + str(e))    
+    def _load_data(self):
+        """Load findings from Burp's extension settings in background thread"""
+        def load_task():
+            try:
+                json_data = self.callbacks.loadExtensionSetting("data_{}".format(self.project_id))
+                if json_data:
+                    loaded = json.loads(json_data)
+                    self.data = []
+
+                    for entry in loaded:
+                        decoded_entry = {
+                            'id': entry['id'],
+                            'url': entry['url'],
+                            'name': entry['name'],
+                            'description': entry.get('description', 'TODO'),
+                            'severity': entry.get('severity', 'TODO'),
+                            'impact': entry.get('impact', 'TODO'),
+                            'recommendation': entry.get('recommendation', 'TODO'),
+                            'request': base64.b64decode(entry['request'].encode('utf-8')),
+                            'response': base64.b64decode(entry['response'].encode('utf-8')) if entry['response'] else None
+                        }
+                        self.data.append(decoded_entry)
+                    log("Loaded {} findings for project {}".format(len(self.data), self.project_id))
+                else:
+                    log("No existing findings for project " + self.project_id)
+                    self.data = []
+            except Exception as e:
+                log("Load failed: " + str(e))
+                self.data = []
+            finally:
+                SwingUtilities.invokeLater(self.notify_listeners)
+
+        threading.Thread(target=load_task).start()
+
+    def _save_data(self):
+        """Save findings to Burp's extension settings in background thread"""
+        def save_task():
+            try:
+                with self._save_lock:
+                    # Convert findings to serializable format
+                    serializable_data = []
+                    for entry in self.data:
+                        serialized_entry = {
+                            'id': entry['id'],
+                            'url': entry['url'],
+                            'name': entry['name'],
+                            'description': entry.get('description', 'TODO'),
+                            'severity': entry.get('severity', 'TODO'),
+                            'impact': entry.get('impact', 'TODO'),
+                            'recommendation': entry.get('recommendation', 'TODO'),
+                            'request': base64.b64encode(entry['request']).decode('utf-8'),
+                            'response': base64.b64encode(entry['response']).decode('utf-8') if entry['response'] else None
+                        }
+                        serializable_data.append(serialized_entry)
+                    
+                    # Save to Burp's storage
+                    json_data = json.dumps(serializable_data)
+                    self.callbacks.saveExtensionSetting("data_{}".format(self.project_id), json_data)
+                    log("Saved {} findings for project {}".format(len(self.data), self.project_id))
+            except Exception as e:
+                log("Save failed: " + str(e))
+
+        threading.Thread(target=save_task).start()
 
     def notify_listeners(self):
         """Notify all listeners of data change"""
@@ -464,67 +521,6 @@ class MessageController:
             session_id = "session_" + str(int(time.time()))
             return session_id
 
-    def _save_data(self):
-        """Save findings to Burp's extension settings"""
-        try:
-            # Convert findings to serializable format
-            serializable_data = []
-            for entry in self.data:
-                serialized_entry = {
-                    'id': entry['id'],
-                    'url': entry['url'],
-                    'name': entry['name'],
-                    'description': entry.get('description', 'TODO'),
-                    'severity': entry.get('severity', 'TODO'),
-                    'impact': entry.get('impact', 'TODO'),
-                    'recommendation': entry.get('recommendation', 'TODO'),
-                    'request': base64.b64encode(entry['request']).decode('utf-8'),
-                    'response': base64.b64encode(entry['response']).decode('utf-8') if entry['response'] else None
-                }
-                serializable_data.append(serialized_entry)
-            
-            # Save to Burp's storage
-            json_data = json.dumps(serializable_data)
-            self.callbacks.saveExtensionSetting("data_{}".format(self.project_id), json_data)
-            log("Saved {} findings for project {}".format(len(self.data), self.project_id))
-        except Exception as e:
-            log("Save failed: " + str(e))
-
-    def _load_data(self):
-        """Load findings from Burp's extension settings"""
-        try:
-            json_data = self.callbacks.loadExtensionSetting("data_{}".format(self.project_id))
-            if json_data:
-                loaded = json.loads(json_data)
-                self.data = []
-
-                for entry in loaded:
-                    decoded_entry = {
-                        'id': entry['id'],
-                        'url': entry['url'],
-                        'name': entry['name'],
-                        'description': entry.get('description', 'TODO'),
-                        'severity': entry.get('severity', 'TODO'),
-                        'impact': entry.get('impact', 'TODO'),
-                        'recommendation': entry.get('recommendation', 'TODO'),
-                        'request': base64.b64decode(entry['request'].encode('utf-8')),
-                        'response': base64.b64decode(entry['response'].encode('utf-8')) if entry['response'] else None
-                    }
-                    self.data.append(decoded_entry)
-                log("Loaded {} findings for project {}".format(len(self.data), self.project_id))
-            else:
-                log("No existing findings for project " + self.project_id)
-                self.data = []
-        except Exception as e:
-            log("Load failed: " + str(e))
-            self.data = []
-
-    def clear_data(self):
-        """Clear all findings"""
-        self.data = []
-        self._save_data()
-        self.notify_listeners()
-
     def send_to_burp_issues(self, finding_indices=None):
         """
         Send findings to Burp's Issues panel
@@ -553,6 +549,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         self.is_processing = False
         self._last_invocation_time = 0
         self._menu_lock = False
+        self._threads = []
     
     def registerExtenderCallbacks(self, callbacks):
         self.callbacks = callbacks
@@ -567,6 +564,9 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         self.controller.add_listener(self.ui)
         callbacks.addSuiteTab(self)
         callbacks.registerContextMenuFactory(self)
+        callbacks.registerExtensionStateListener(self)
+        
+        # Register unload handler
         callbacks.registerExtensionStateListener(self)
         
         log("Extension registered")
@@ -585,10 +585,23 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
 
     def extensionUnloaded(self):
         """Handle extension unloading"""
-        log("Extension unloading - saving data")
-        if self.controller:
-            self.controller._save_data()
-
+        log("Extension unloading - cleaning up")
+        try:
+            # Save any pending data
+            if self.controller:
+                self.controller._save_data()
+            
+            # Clean up UI
+            if self.ui:
+                self.ui.panel.removeAll()
+            
+            # Clear any remaining data
+            if self.controller:
+                self.controller.data = []
+            
+            log("Extension unloaded successfully")
+        except Exception as e:
+            log("Error during extension unload: " + str(e))
 
     def getTabCaption(self):
         return "VulnLog"

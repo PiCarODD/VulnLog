@@ -289,11 +289,6 @@ class AddFindingDialog(JDialog):
             'handled': True
         }
         
-        # Inform user that finding will be added to Burp Issues
-        JOptionPane.showMessageDialog(self,
-            "Finding will be added to VulnLog and automatically sent to Burp Issues.",
-            "Information",
-            JOptionPane.INFORMATION_MESSAGE)
         
         self.dispose()
 
@@ -766,45 +761,11 @@ class VulnLogTab(IMessageEditorController):
         top_panel.add(self.count_label)
         top_panel.add(Box.createHorizontalGlue())
         
-        # Add AI settings section
-        ai_panel = JPanel()
-        ai_panel.setLayout(BoxLayout(ai_panel, BoxLayout.X_AXIS))
-        ai_panel.setBorder(BorderFactory.createTitledBorder("AI Settings"))
-        
-        # Create button group for radio buttons
-        button_group = ButtonGroup()
-        
-        # Add GPT radio button
-        self.gpt_radio = JRadioButton("GPT")
-        button_group.add(self.gpt_radio)
-        ai_panel.add(self.gpt_radio)
-        ai_panel.add(Box.createHorizontalStrut(5))
-        
-        # Add Deepseek radio button
-        self.deepseek_radio = JRadioButton("Deepseek")
-        button_group.add(self.deepseek_radio)
-        ai_panel.add(self.deepseek_radio)
-        ai_panel.add(Box.createHorizontalStrut(10))
-        
-        # Add API key input
-        api_key_label = JLabel("API Key: ")
-        ai_panel.add(api_key_label)
-        self.api_key_field = JTextField("Coming Soon!", 20)
-        ai_panel.add(self.api_key_field)
-        
-        top_panel.add(ai_panel)
-        
         # Add "View Details" button to top panel
         self.details_button = JButton("View Details")
         self.details_button.addActionListener(lambda event: self._show_details_dialog())
         self.details_button.setEnabled(False)  # Initially disabled until selection
         top_panel.add(self.details_button)
-        top_panel.add(Box.createHorizontalStrut(10))
-        
-        # Add "Send to Burp Issues" button
-        self.send_to_burp_button = JButton("Send to Burp Issues")
-        self.send_to_burp_button.addActionListener(self._send_to_burp_issues)
-        top_panel.add(self.send_to_burp_button)
         top_panel.add(Box.createHorizontalStrut(10))
         
         # Create table model and table
@@ -875,15 +836,6 @@ class VulnLogTab(IMessageEditorController):
                     
         return MouseListener(self)
 
-    def _ai_option_changed(self, ai_type):
-        """Handle AI option selection"""
-        JOptionPane.showMessageDialog(
-            self.panel,
-            "{} integration coming soon!".format(ai_type),
-            "AI Settings",
-            JOptionPane.INFORMATION_MESSAGE
-        )
-
     def _selection_changed(self, event):
         """Handle table selection changes"""
         if not event.getValueIsAdjusting():
@@ -923,18 +875,6 @@ class VulnLogTab(IMessageEditorController):
                 self._request_viewer.setMessage(None, True)
                 self._response_viewer.setMessage(None, False)
 
-    def _ai_enabled_changed(self):
-        """Handle AI enable/disable"""
-        is_enabled = self.enable_ai.isSelected()
-        self.api_key_field.setEnabled(is_enabled)
-        if is_enabled:
-            JOptionPane.showMessageDialog(
-                self.panel,
-                "AI feature coming soon!",
-                "AI Settings",
-                JOptionPane.INFORMATION_MESSAGE
-            )
-
     def update(self):
         """Update UI when data changes"""
         self.table_model.fireTableDataChanged()
@@ -955,7 +895,6 @@ class VulnLogTab(IMessageEditorController):
             self._request_viewer.setMessage(None, True)
             self._response_viewer.setMessage(None, False)
             self.delete_button.setEnabled(False)
-            self.status_combo.setEnabled(False)
 
     def _edit_finding(self):
         """Handle double click on finding"""
